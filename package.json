@@ -1,0 +1,8 @@
+{
+  "name": "propricing-web",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "resend": "^2.0.0"
+  }
+}
