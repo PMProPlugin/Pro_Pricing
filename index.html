@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2845,106 +2844,238 @@ async function init() {
 
 init();
 
-// === Patch: Column visibility to match exact spec ===
+// === Patch: Column visibility per Channel (FIXED) ===
 (function(){
-  const orig = window.updateColumnVisibility;
   window.updateColumnVisibility = function(){
     const ch = document.querySelector('#channelSelect')?.value || 'Flagship';
-    // Show all
+    
+    // ซ่อนทุก Column ก่อน
     document.querySelectorAll('.col-normal, .col-market, .col-promo, .col-expire, .col-marketmargin, .col-t1, .col-margin1, .col-t2, .col-margin2, .col-t3, .col-margin3')
-      .forEach(el=>el.classList.remove('hidden'));
+      .forEach(el=>el.classList.add('hidden'));
+    
     if (ch === 'Flagship') {
-      // Show: SKU, Brand, Description, Category, Normal, Promotion, Expire
-      document.querySelectorAll('.col-market, .col-marketmargin, .col-t1, .col-t2, .col-t3, .col-margin1, .col-margin2, .col-margin3')
-        .forEach(el=>el.classList.add('hidden'));
+      // Flagship: แสดงเฉพาะ Normal Price, Promotion, Expire Date
+      document.querySelectorAll('.col-normal, .col-promo, .col-expire')
+        .forEach(el=>el.classList.remove('hidden'));
+        
     } else if (ch === 'Marketplace') {
-      // Show: SKU, Brand, Description, Category, Normal, Marketplace
-      document.querySelectorAll('.col-promo, .col-expire, .col-t1, .col-t2, .col-t3, .col-margin1, .col-margin2, .col-margin3, .col-marketmargin')
-        .forEach(el=>el.classList.add('hidden'));
-      // keep .col-normal and .col-market visible
+      // Marketplace: แสดงเฉพาะ Normal Price, Marketplace Price
+      document.querySelectorAll('.col-normal, .col-market')
+        .forEach(el=>el.classList.remove('hidden'));
+        
     } else if (ch === 'Dealer') {
-      // Show: SKU, Brand, Description, Category, Normal, Marketplace, T1/Margin, T2/Margin, T3/Margin
-      document.querySelectorAll('.col-promo, .col-expire')
-        .forEach(el=>el.classList.add('hidden'));
-      // ensure everything else stays
+      // Dealer: แสดง Normal, Marketplace, T1+Margin, T2+Margin, T3+Margin
+      document.querySelectorAll('.col-normal, .col-market, .col-t1, .col-margin1, .col-t2, .col-margin2, .col-t3, .col-margin3')
+        .forEach(el=>el.classList.remove('hidden'));
     }
-    if (typeof orig === 'function') { try { orig(); } catch(e){} }
-    if (typeof window.renderTable === 'function') window.renderTable();
+    
+    // อัปเดต UI หลังเปลี่ยน Channel
+    if (typeof window.updatePermissionBasedUI === 'function') {
+      window.updatePermissionBasedUI();
+    }
+    if (typeof window.renderTable === 'function') {
+      window.renderTable();
+    }
   };
-  // Run once on load (in case UI already rendered)
-  document.addEventListener('DOMContentLoaded', ()=>{ try { window.updateColumnVisibility(); } catch(e){} });
-})();
-
-// === Patch: Open Print Tab also shows Print Modal ===
-(function(){
-  const btn = document.querySelector('#btnOpenPrint');
-  if (btn && !btn.__patchedOpenPrint) {
-    btn.__patchedOpenPrint = true;
-    btn.addEventListener('click', ()=>{
-      // Allow original handler to run (opens new tab), then show modal
-      setTimeout(()=>{
-        // Try dedicated function if exists
-        if (typeof window.renderPreview === 'function') window.renderPreview();
-        const m = document.querySelector('#printModal');
-        if (m) m.classList.remove('hidden');
-      }, 50);
-    });
-  }
-})();
-
-// === Patch: Filter dropdown — only one at a time + Sort + Select All ===
-(function(){
-  // Close others before any .filter-btn opens
-  document.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.filter-btn');
-    if (btn) {
-      // capture phase ensured by true below
-      document.querySelectorAll('.filter-dropdown').forEach(dd=>dd.classList.remove('show'));
-    } else if (!e.target.closest('.filter-dropdown')) {
-      document.querySelectorAll('.filter-dropdown').forEach(dd=>dd.classList.remove('show'));
+  
+  // เรียกใช้ทันทีหลังโหลดหน้า
+  document.addEventListener('DOMContentLoaded', ()=>{
+    try { 
+      window.updateColumnVisibility(); 
+    } catch(e){
+      console.error('updateColumnVisibility error:', e);
     }
-  }, true);
-
-  // Enhance dropdown content after it appears
-  const observer = new MutationObserver(() => {
-    document.querySelectorAll('.filter-dropdown.show').forEach(dd => {
-      if (dd.__enhanced) return;
-      dd.__enhanced = true;
-      const box = dd.querySelector('.filter-dropdown-content');
-      if (!box) return;
-      const toolbar = document.createElement('div');
-      toolbar.className = 'flex items-center justify-between gap-2 mb-2 text-[11px]';
-      toolbar.innerHTML = `
-        <div class="flex items-center gap-2">
-          <button class="px-2 py-1 rounded bg-zinc-900 border border-zinc-700" data-filter-sort="az">Sort A-Z</button>
-          <button class="px-2 py-1 rounded bg-zinc-900 border border-zinc-700" data-filter-sort="za">Sort Z-A</button>
-        </div>
-        <div>
-          <button class="px-2 py-1 rounded bg-zinc-900 border border-zinc-700" data-filter-select-all>Select All</button>
-        </div>`;
-      box.insertBefore(toolbar, box.firstChild);
-
-      toolbar.addEventListener('click', (ev)=>{
-        const list = dd.querySelector('[data-filter-list]');
-        if (!list) return;
-        if (ev.target.matches('[data-filter-sort="az"],[data-filter-sort="za"]')) {
-          const items = Array.from(list.querySelectorAll('label'));
-          const dir = ev.target.getAttribute('data-filter-sort');
-          items.sort((a,b)=>{
-            const aa = a.textContent.trim().toLowerCase();
-            const bb = b.textContent.trim().toLowerCase();
-            return dir === 'az' ? aa.localeCompare(bb) : bb.localeCompare(aa);
-          });
-          items.forEach(it=>list.appendChild(it));
-        } else if (ev.target.matches('[data-filter-select-all]')) {
-          list.querySelectorAll('input[type="checkbox"]').forEach(ch => ch.checked = true);
-        }
-      });
-    });
   });
-  observer.observe(document.body, { subtree: true, childList: true });
 })();
 
+// === Patch: Keep Print Modal open after opening print tab ===
+(function(){
+  const originalOpenPrintTab = window.openPrintTab;
+  window.openPrintTab = function(){
+    // เรียกฟังก์ชันเดิมที่เปิดแท็บใหม่
+    if (typeof originalOpenPrintTab === 'function') {
+      originalOpenPrintTab();
+    }
+    // หลังจากนั้น ให้ Modal ค้างอยู่ (ไม่ปิด)
+    const modal = document.querySelector('#printModal');
+    if (modal) {
+      modal.classList.remove('hidden');
+    }
+  };
+})();
+
+// === Patch: Filter dropdown - ปรับปรุงใหม่ให้ใช้งานได้ถูกต้อง ===
+(function(){
+  // ฟังก์ชันปิด dropdown ทั้งหมด
+  window.closeAllFilterDropdowns = function(){
+    document.querySelectorAll('.filter-dropdown').forEach(dd => dd.classList.remove('show'));
+  };
+
+  // ปิด dropdown เมื่อคลิกนอก dropdown
+  document.addEventListener('click', (e)=>{
+    if (!e.target.closest('.filter-dropdown') && !e.target.closest('.filter-btn')) {
+      closeAllFilterDropdowns();
+    }
+  });
+
+  // แทนที่ฟังก์ชัน buildFilterDropdown เดิม
+  const originalBuildFilterDropdown = window.buildFilterDropdown;
+  window.buildFilterDropdown = function(key, anchor){
+    // ปิด dropdown อื่นๆ ก่อน
+    closeAllFilterDropdowns();
+
+    const dd = document.querySelector(`#filter-dropdown-${key}`);
+    if (!dd) return;
+
+    const filterKeyMap = {
+      normal: 'normalPrice',
+      promo: 'promoPrice',
+      expire: 'expiresDate',
+      market: 'marketplacePrice',
+      t1: 'dealer1',
+      t2: 'dealer2',
+      t3: 'dealer3'
+    };
+    const prop = filterKeyMap[key] || key;
+
+    // รวบรวมค่าที่ไม่ซ้ำจาก products
+    const values = new Set(
+      (appData.products || [])
+        .map(p => String(p[prop] ?? ''))
+        .filter(v => v !== '')
+    );
+
+    // สร้าง HTML สำหรับ dropdown
+    dd.innerHTML = `
+      <div class="filter-dropdown-content">
+        <div class="flex items-center gap-2 mb-2">
+          <input type="text" class="flex-1 px-2 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs" 
+                 placeholder="Search..." data-filter-search="${key}" />
+        </div>
+        <div class="flex items-center justify-between gap-2 mb-2 text-[11px]">
+          <div class="flex gap-1">
+            <button class="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700" 
+                    data-filter-sortaz="${key}">A-Z</button>
+            <button class="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700" 
+                    data-filter-sortza="${key}">Z-A</button>
+          </div>
+          <button class="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700" 
+                  data-filter-selectall="${key}">Select All</button>
+        </div>
+        <div class="max-h-52 overflow-auto text-xs space-y-1" data-filter-list="${key}">
+          ${Array.from(values).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})).map(v=>{
+            const checked = columnFilters[key] && columnFilters[key].has(v);
+            return `<label class="flex items-center gap-2 hover:bg-zinc-800 px-1 py-0.5 rounded cursor-pointer">
+              <input type="checkbox" value="${v.replace(/"/g,'&quot;')}" ${checked?'checked':''} 
+                     class="filter-chk" data-filter-key="${key}" />
+              <span>${v||'<em>(empty)</em>'}</span>
+            </label>`;
+          }).join('')}
+        </div>
+        <div class="flex justify-between mt-2 text-xs gap-2">
+          <button class="px-3 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700" 
+                  data-filter-clear="${key}">Clear</button>
+          <button class="px-3 py-1 rounded bg-brand.red hover:bg-red-600 border border-red-700 font-semibold" 
+                  data-filter-apply="${key}">Apply</button>
+        </div>
+      </div>`;
+
+    // วางตำแหน่ง dropdown
+    const rect = anchor.getBoundingClientRect();
+    dd.style.left = rect.left + 'px';
+    dd.style.top = (rect.bottom + 4) + 'px';
+    dd.classList.add('show');
+
+    // ผูก event handlers สำหรับ dropdown นี้
+    setupDropdownHandlers(dd, key);
+  };
+
+  // ฟังก์ชันตั้งค่า event handlers ใน dropdown
+  function setupDropdownHandlers(dd, key){
+    const searchInput = dd.querySelector(`[data-filter-search="${key}"]`);
+    const list = dd.querySelector(`[data-filter-list="${key}"]`);
+    const sortAZ = dd.querySelector(`[data-filter-sortaz="${key}"]`);
+    const sortZA = dd.querySelector(`[data-filter-sortza="${key}"]`);
+    const selectAll = dd.querySelector(`[data-filter-selectall="${key}"]`);
+    const clearBtn = dd.querySelector(`[data-filter-clear="${key}"]`);
+    const applyBtn = dd.querySelector(`[data-filter-apply="${key}"]`);
+
+    // Search
+    if (searchInput && list) {
+      searchInput.oninput = ()=>{
+        const q = searchInput.value.trim().toLowerCase();
+        list.querySelectorAll('label').forEach(lbl=>{
+          const text = lbl.textContent.toLowerCase();
+          lbl.style.display = !q || text.includes(q) ? '' : 'none';
+        });
+      };
+    }
+
+    // Sort A-Z
+    if (sortAZ && list) {
+      sortAZ.onclick = ()=>{
+        const items = Array.from(list.querySelectorAll('label'));
+        items.sort((a,b)=>{
+          const aa = a.textContent.trim().toLowerCase();
+          const bb = b.textContent.trim().toLowerCase();
+          return aa.localeCompare(bb, undefined, {numeric:true, sensitivity:'base'});
+        });
+        items.forEach(it => list.appendChild(it));
+      };
+    }
+
+    // Sort Z-A
+    if (sortZA && list) {
+      sortZA.onclick = ()=>{
+        const items = Array.from(list.querySelectorAll('label'));
+        items.sort((a,b)=>{
+          const aa = a.textContent.trim().toLowerCase();
+          const bb = b.textContent.trim().toLowerCase();
+          return bb.localeCompare(aa, undefined, {numeric:true, sensitivity:'base'});
+        });
+        items.forEach(it => list.appendChild(it));
+      };
+    }
+
+    // Select All
+    if (selectAll && list) {
+      selectAll.onclick = ()=>{
+        list.querySelectorAll('input[type="checkbox"]:not([style*="display: none"])').forEach(ch => {
+          ch.checked = true;
+        });
+      };
+    }
+
+    // Clear
+    if (clearBtn) {
+      clearBtn.onclick = ()=>{
+        columnFilters[key] = new Set();
+        dd.classList.remove('show');
+        currentPage = 1;
+        if (typeof window.renderTable === 'function') window.renderTable();
+        if (typeof window.renderTableHeader === 'function') window.renderTableHeader();
+      };
+    }
+
+    // Apply
+    if (applyBtn && list) {
+      applyBtn.onclick = ()=>{
+        const checks = list.querySelectorAll('.filter-chk');
+        const set = new Set();
+        checks.forEach(ch=>{ 
+          if (ch.checked) set.add(ch.value); 
+        });
+        columnFilters[key] = set;
+        dd.classList.remove('show');
+        currentPage = 1;
+        if (typeof window.renderTable === 'function') window.renderTable();
+        if (typeof window.renderTableHeader === 'function') window.renderTableHeader();
+      };
+    }
+  }
+
+  console.log('[Filter Dropdown] Enhanced and fixed');
+})();
 // === Patch: Hide Settings/Edit for non-privileged user ===
 (function(){
   function apply(){
